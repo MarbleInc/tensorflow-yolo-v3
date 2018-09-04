@@ -12,8 +12,9 @@ tf.app.flags.DEFINE_string('class_names', 'coco.names', 'File with class names')
 tf.app.flags.DEFINE_string('weights_file', 'yolov3.weights', 'Binary file with detector weights')
 tf.app.flags.DEFINE_string('output_file', '', 'Protobuf file with frozen weights and graph')
 
-tf.app.flags.DEFINE_integer('size', 416, 'Image size')
+tf.app.flags.DEFINE_integer('size', 448, 'Image size')
 
+USE_XLA = True
 
 def load_coco_names(file_name):
     names = {}
@@ -44,6 +45,9 @@ def main(argv=None):
     config = tf.ConfigProto(device_count={'GPU': 1})
     config.gpu_options.allow_growth = True
     config.gpu_options.per_process_gpu_memory_fraction = 0.1
+    if USE_XLA:
+        jit_level = tf.OptimizerOptions.ON_1
+        config.graph_options.optimizer_options.global_jit_level = jit_level
 
     with tf.Session(config=config) as sess:
         sess.run(tf.global_variables_initializer())
