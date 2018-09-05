@@ -14,7 +14,7 @@ tf.app.flags.DEFINE_string('class_names', 'coco.names', 'File with class names')
 tf.app.flags.DEFINE_string('model', 'yolov3.pb', 'Binary file with detector weights')
 
 tf.app.flags.DEFINE_bool('use_xla', False, 'Runtime optimization')
-tf.app.flags.DEFINE_integer('size', 416, 'Image size')
+tf.app.flags.DEFINE_integer('size', 448, 'Image size')
 
 tf.app.flags.DEFINE_float('conf_threshold', 0.5, 'Confidence threshold')
 tf.app.flags.DEFINE_float('iou_threshold', 0.4, 'IoU threshold')
