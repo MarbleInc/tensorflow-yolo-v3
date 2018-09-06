@@ -13,8 +13,7 @@ tf.app.flags.DEFINE_string('weights_file', 'yolov3.weights', 'Binary file with d
 tf.app.flags.DEFINE_string('output_file', '', 'Protobuf file with frozen weights and graph')
 
 tf.app.flags.DEFINE_integer('size', 448, 'Image size')
-
-USE_XLA = True
+tf.app.flags.DEFINE_bool('use_xla', False, 'Runtime optimization')
 
 def load_coco_names(file_name):
     names = {}
@@ -24,28 +23,27 @@ def load_coco_names(file_name):
     return names
 
 
-def convert_to_original_size(box, size, original_size):
-    ratio = original_size / size
-    box = box.reshape(2, 2) * ratio
-    return list(box.reshape(-1))
-
-
 def main(argv=None):
     # placeholder for detector inputs
     classes = load_coco_names(FLAGS.class_names)
-    inputs = tf.placeholder(tf.float32, [None, FLAGS.size, FLAGS.size, 3], name="input")
+    inputs = tf.placeholder(tf.float32, [None, None, None, 3], name="input")
+    resize_method = tf.image.ResizeMethod.BILINEAR
+    inputs_resized = tf.image.resize_images(
+        images=inputs, size=[FLAGS.size, FLAGS.size], method=resize_method, align_corners=True)
 
     with tf.variable_scope('detector'):
-        detections = yolo_v3(inputs, len(classes), data_format='NCHW')
+        format = 'NCHW'
+        # format = 'NHWC'
+        detections = yolo_v3(inputs_resized, len(classes), data_format=format)
         load_ops = load_weights(tf.global_variables(scope='detector'), FLAGS.weights_file)
 
-    boxes = detections_boxes(detections)
+    boxes = detections_boxes(detections, FLAGS.size, FLAGS.size)
     boxes = tf.identity(boxes, "output")
 
     config = tf.ConfigProto(device_count={'GPU': 1})
     config.gpu_options.allow_growth = True
     config.gpu_options.per_process_gpu_memory_fraction = 0.1
-    if USE_XLA:
+    if FLAGS.use_xla:
         jit_level = tf.OptimizerOptions.ON_1
         config.graph_options.optimizer_options.global_jit_level = jit_level
 

@@ -20,16 +20,11 @@ parser.add_argument('--filter_height', type=int, default=60, help='Height thresh
 parser.add_argument('--filter_width', type=int, default=25, help='Width threshold for boxes.')
 parser.add_argument('--score_threshold', type=float, default=0.5, help='Score threshold for model detections.')
 
-USE_XLA = False
-PRED_SIZE = 448
+USE_XLA = True
 
-# def convert_to_original_size(box, original_size):
-#     box = box.reshape(2, 2) * original_size
-#     return list(box.reshape(-1))
-
-def convert_to_original_size(box, size, original_size):
-    ratio = original_size / size
-    box = box.reshape(2, 2) * ratio
+def convert_to_original_size(box, original_size):
+    box = box.reshape(2, 2) * original_size
+    box = box.astype(np.int32)
     return list(box.reshape(-1))
 
 def get_obj_bbox_vector(obj):
@@ -55,16 +50,17 @@ def bb_intersection_over_union(boxA, boxB):
     yB = min(boxA[3], boxB[3])
 
     # compute the area of intersection rectangle
-    interArea = max(0, xB - xA + 1) * max(0, yB - yA + 1)
+    interArea = max(0, xB - xA) * max(0, yB - yA)
     # compute the area of both the prediction and ground-truth
     # rectangles
-    boxAArea = (boxA[2] - boxA[0] + 1) * (boxA[3] - boxA[1] + 1)
-    boxBArea = (boxB[2] - boxB[0] + 1) * (boxB[3] - boxB[1] + 1)
+    boxAArea = (boxA[2] - boxA[0]) * (boxA[3] - boxA[1])
+    boxBArea = (boxB[2] - boxB[0]) * (boxB[3] - boxB[1])
 
     # compute the intersection over union by taking the intersection
     # area and dividing it by the sum of prediction + ground-truth
     # areas - the interesection area
-    iou = interArea / float(boxAArea + boxBArea - interArea)
+    # we add small epsilon of 1e-05 to avoid division by 0
+    iou = interArea / float(boxAArea + boxBArea - interArea + 1e-05)
 
     # return the intersection over union value
     return iou
@@ -154,8 +150,6 @@ def process_one_image(pred_boxes, img_path, filter_size, IoU, gt_class):
         else:
             pass
 
-    # print("gt_boxes: %s" % gt_boxes)
-    # print("pred_boxes: %s" % pred_boxes)
     if filter_size is not None:
         gt_boxes = list(filter(lambda x: bb_filter_det(x, filter_size), gt_boxes))
         pred_boxes = list(filter(lambda x: bb_filter_det(x, filter_size), pred_boxes))
@@ -170,7 +164,8 @@ def non_max_suppression(predictions_with_boxes, confidence_threshold, iou_thresh
     """
     Applies Non-max suppression to prediction boxes.
 
-    :param predictions_with_boxes: 3D numpy array, first 4 values in 3rd dimension are bbox attrs, 5th is confidence
+    :param predictions_with_boxes: 3D numpy array. [N_IMGS, N_CLASSES, BOX_ATTRS]. First 4 values in
+                                   BOX_ATTRS are bbox attrs, 5th is confidence
     :param confidence_threshold: the threshold for deciding if prediction is valid
     :param iou_threshold: the threshold for deciding if two boxes overlap
     :return: dict: class -> [(box, score)]
@@ -202,7 +197,7 @@ def non_max_suppression(predictions_with_boxes, confidence_threshold, iou_thresh
             while len(cls_boxes) > 0:
                 box = cls_boxes[0]
                 score = cls_scores[0]
-                if not cls in image_result:
+                if cls not in image_result:
                     image_result[cls] = []
                 image_result[cls].append((box, score))
                 cls_boxes = cls_boxes[1:]
@@ -220,9 +215,7 @@ def detect_batch(sess, img_paths, tf_input, tf_output, iou_threshold, conf_thres
 
     for img_path in img_paths:
         img = Image.open(img_path)
-        # input_data.append(np.array(img, dtype=np.float32))
-        img_resized = img.resize(size=(PRED_SIZE, PRED_SIZE))
-        input_data.append(np.array(img_resized, dtype=np.float32))
+        input_data.append(np.array(img, dtype=np.float32))
 
     input_data = np.stack(input_data)
     start = time.time()
@@ -241,7 +234,7 @@ def detect_batch(sess, img_paths, tf_input, tf_output, iou_threshold, conf_thres
                 print("filtered out class %s" % cls)
                 continue
             for box, score in bboxs:
-                box = convert_to_original_size(box, np.array([PRED_SIZE, PRED_SIZE]), np.array(img.size))
+                box = convert_to_original_size(box, np.array(img.size))
                 image_bounding_boxes.append(box)
         bounding_boxes.append(image_bounding_boxes)
 
@@ -269,6 +262,10 @@ def evaluate_on_batches(args):
         ds_imgs = os.listdir(join(pr_dir, file, 'img'))
         ds_imgs = [join(pr_dir, file, 'img', x) for x in ds_imgs]
         img_pathes.extend(ds_imgs)
+    # img_pathes = [
+    #     '/home/zac/Desktop/ped_det_gt1_supervisely/dataset00000/img/2018-05-15t20-05-09.550054_5afb3d839d3f93001f3f7c11_right-0000358.jpg',
+    #     # '/home/zac/Desktop/ped_det_gt1_supervisely/dataset00000/img/2018-05-07t18-26-04.810166_5af09a408196de001fe5f0bb_left-0000194.jpg'
+    # ]
 
     # Init tf Session
     config = tf.ConfigProto()
@@ -281,7 +278,7 @@ def evaluate_on_batches(args):
     sess.run(init)
 
     # Load the frozen graph
-    load_graph(sess, os.path.join(args.model_dir, 'model.pb'))
+    load_graph(sess, os.path.join(args.model_dir, 'model_resize.pb'))
 
     # Get the input and output tensors
     tf_input = sess.graph.get_tensor_by_name('input:0')
@@ -291,7 +288,7 @@ def evaluate_on_batches(args):
     # print("output tensor:")
     # print(tf_output)
 
-    # detection_graph, session = load_network(args.model_dir)
+    # Warm up the network
     _, _ = detect_batch(
         sess, [img_pathes[0], img_pathes[0]],
         tf_input, tf_output, iou_threshold=IoU, conf_threshold=args.score_threshold,

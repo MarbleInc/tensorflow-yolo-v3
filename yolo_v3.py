@@ -305,20 +305,23 @@ def load_weights(var_list, weights_file):
     return assign_ops
 
 
-def detections_boxes(detections):
+def detections_boxes(detections, net_height, net_width):
     """
-    Converts center x, center y, width and height values to coordinates of top left and bottom right points.
+    Converts center x, center y, width and height values to normalized coordinates of top left and
+    bottom right points between 0 and 1.
 
     :param detections: outputs of YOLO v3 detector of shape (?, 10647, (num_classes + 5))
+    :param net_height: detector's image height as a constant
+    :param net_width:  detector's image width as a constant
     :return: converted detections of same shape as input
     """
     center_x, center_y, width, height, attrs = tf.split(detections, [1, 1, 1, 1, -1], axis=-1)
     w2 = width / 2
     h2 = height / 2
-    x0 = center_x - w2
-    y0 = center_y - h2
-    x1 = center_x + w2
-    y1 = center_y + h2
+    x0 = (center_x - w2) / net_width
+    y0 = (center_y - h2) / net_height
+    x1 = (center_x + w2) / net_width
+    y1 = (center_y + h2) / net_height
 
     boxes = tf.concat([x0, y0, x1, y1], axis=-1)
     detections = tf.concat([boxes, attrs], axis=-1)
@@ -328,7 +331,7 @@ def detections_boxes(detections):
 def _iou(box1, box2):
     """
     Computes Intersection over Union value for 2 bounding boxes
-    
+
     :param box1: array of 4 values (top left and bottom right coords): [x0, y0, x1, x2]
     :param box2: same as box1
     :return: IoU
@@ -396,4 +399,3 @@ def non_max_suppression(predictions_with_boxes, confidence_threshold, iou_thresh
                 cls_scores = cls_scores[np.nonzero(iou_mask)]
 
     return result
-

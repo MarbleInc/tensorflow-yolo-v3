@@ -3,6 +3,7 @@
 import numpy as np
 import tensorflow as tf
 from PIL import Image, ImageDraw
+import pprint
 
 from yolo_v3 import non_max_suppression
 
@@ -17,7 +18,7 @@ tf.app.flags.DEFINE_bool('use_xla', False, 'Runtime optimization')
 tf.app.flags.DEFINE_integer('size', 448, 'Image size')
 
 tf.app.flags.DEFINE_float('conf_threshold', 0.5, 'Confidence threshold')
-tf.app.flags.DEFINE_float('iou_threshold', 0.4, 'IoU threshold')
+tf.app.flags.DEFINE_float('iou_threshold', 0.5, 'IoU threshold')
 
 
 def load_coco_names(file_name):
@@ -28,21 +29,20 @@ def load_coco_names(file_name):
     return names
 
 
-def draw_boxes(boxes, img, cls_names, detection_size):
+def draw_boxes(boxes, img, cls_names):
     draw = ImageDraw.Draw(img)
 
     for cls, bboxs in boxes.items():
         color = tuple(np.random.randint(0, 256, 3))
         for box, score in bboxs:
-            box = convert_to_original_size(box, np.array(detection_size), np.array(img.size))
+            box = convert_to_original_size(box, np.array(img.size))
             print("%s: %s (%s)" % (cls, score, box))
             draw.rectangle(box, outline=color)
             draw.text(box[:2], '{} {:.2f}%'.format(cls_names[cls], score * 100), fill=color)
 
 
-def convert_to_original_size(box, size, original_size):
-    ratio = original_size / size
-    box = box.reshape(2, 2) * ratio
+def convert_to_original_size(box, original_size):
+    box = box.reshape(2, 2) * original_size
     return list(box.reshape(-1))
 
 def load_graph(sess, graph_file):
@@ -56,14 +56,12 @@ def main(argv=None):
     img = Image.open(FLAGS.input_img)
 
     # FIXME: do the resize in tensorflow so I can pass any size input image
-    img_resized = img.resize(size=(FLAGS.size, FLAGS.size))
-    input_data = np.stack([np.array(img_resized, dtype=np.float32)])
+    # img_resized = img.resize(size=(FLAGS.size, FLAGS.size))
+    # input_data = np.stack([np.array(img_resized, dtype=np.float32)])
+    input_data = np.stack([np.array(img, dtype=np.float32)])
     print("input shape: %s" % (input_data.shape,))
 
     classes = load_coco_names(FLAGS.class_names)
-
-    # placeholder for detector inputs
-    # inputs = tf.placeholder(tf.float32, [None, FLAGS.size, FLAGS.size, 3])
 
     # Init tf Session
     config = tf.ConfigProto()
@@ -89,10 +87,11 @@ def main(argv=None):
     detected_boxes = sess.run(tf_output, feed_dict={tf_input: input_data})
 
     # TODO: look into using tf.image.non_max_suppression instead
-    filtered_boxes = non_max_suppression(detected_boxes, confidence_threshold=FLAGS.conf_threshold,
-                                         iou_threshold=FLAGS.iou_threshold)
+    filtered_boxes = non_max_suppression(
+        detected_boxes, confidence_threshold=FLAGS.conf_threshold, iou_threshold=FLAGS.iou_threshold)
 
-    draw_boxes(filtered_boxes, img, classes, (FLAGS.size, FLAGS.size))
+    # pprint.pprint(filtered_boxes)
+    draw_boxes(filtered_boxes, img, classes)
 
     img.save(FLAGS.output_img)
 
