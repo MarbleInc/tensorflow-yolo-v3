@@ -7,6 +7,7 @@ import pprint
 
 from yolo_v3 import non_max_suppression
 
+
 FLAGS = tf.app.flags.FLAGS
 
 tf.app.flags.DEFINE_string('input_img', '', 'Input image')
@@ -55,9 +56,6 @@ def load_graph(sess, graph_file):
 def main(argv=None):
     img = Image.open(FLAGS.input_img)
 
-    # FIXME: do the resize in tensorflow so I can pass any size input image
-    # img_resized = img.resize(size=(FLAGS.size, FLAGS.size))
-    # input_data = np.stack([np.array(img_resized, dtype=np.float32)])
     input_data = np.stack([np.array(img, dtype=np.float32)])
     print("input shape: %s" % (input_data.shape,))
 
