@@ -32,8 +32,8 @@ def main(argv=None):
         images=inputs, size=[FLAGS.size, FLAGS.size], method=resize_method, align_corners=True)
 
     with tf.variable_scope('detector'):
-        format = 'NCHW'
-        # format = 'NHWC'
+        # format = 'NCHW'
+        format = 'NHWC'
         detections = yolo_v3(inputs_resized, len(classes), data_format=format)
         load_ops = load_weights(tf.global_variables(scope='detector'), FLAGS.weights_file)
 
