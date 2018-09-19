@@ -1,4 +1,5 @@
 import os.path
+import pprint
 import tensorflow as tf
 import tensorrt as trt
 from tensorflow.python.platform import gfile
@@ -37,7 +38,9 @@ def get_frozen_graph(modelpath):
 #         minimum_segment_size=3)
 
 def convert_from_frozen_graph(modelpath):
-    # tf_model = get_frozen_graph(modelpath)
+    tf_model = get_frozen_graph(modelpath)
+    #pprint.pprint([n.name for n in tf_model.node])
+    print(tf_model.node[-1])
     uff_model = uff.from_tensorflow_frozen_model(modelpath, ["output"])
     parser = uffparser.create_uff_parser()
     parser.register_input("input", (None, None, None, 3), 0)

@@ -14,6 +14,7 @@ from os.path import join
 parser = argparse.ArgumentParser()
 parser.add_argument('--test_dataset', type=str, required=True, help='Path to evaluation dataset.')
 parser.add_argument('--model_dir', type=str, required=True, help='Directory contains model weights and configs.')
+parser.add_argument('--model_file', type=str, default="model.pb", required=False, help='Filename of the frozen model in the model dir.')
 parser.add_argument('--gt_class', type=str, default='ground_truth', help='Class corresponds to ground truth.')
 parser.add_argument('--iou', type=float, default=0.5, help='IoU threshold to evaluate mertics.')
 parser.add_argument('--filter_height', type=int, default=60, help='Height threshold for boxes.')
@@ -278,7 +279,7 @@ def evaluate_on_batches(args):
     sess.run(init)
 
     # Load the frozen graph
-    load_graph(sess, os.path.join(args.model_dir, 'model_resize.pb'))
+    load_graph(sess, os.path.join(args.model_dir, args.model_file))
 
     # Get the input and output tensors
     tf_input = sess.graph.get_tensor_by_name('input:0')
